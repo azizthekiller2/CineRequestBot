@@ -1,6 +1,7 @@
 import asyncio
 import html
 import logging
+import re
 import uuid
 from time import time
 
@@ -29,12 +30,6 @@ _RATE_LIMIT_WINDOW = 30
 # Per-user cooldown for Request Here (60 s)
 _req_cooldown: dict = {}
 
-_OLD_LINKS = [
-    "https://t.me/BackupchannelJoinn",
-    "https://t.me/%2BiGDgei3ADkZiMjNl",
-    "https://t.me/+iGDgei3ADkZiMjNl",
-    "https://t.me/backupchannek",
-]
 
 
 def _is_rate_limited(user_id: int) -> bool:
@@ -98,8 +93,7 @@ async def _search_channels(user_client, channels: list, query: str, backup_link:
             async for msg in user_client.search_messages(ch_id, query=query, limit=50):
                 text = (msg.text or msg.caption or "").strip()
                 if backup_link:
-                    for old in _OLD_LINKS:
-                        text = text.replace(old, backup_link)
+                    text = re.sub(r"https?://t\.me/(?:\+|%2B|c/|joinchat/)[a-zA-Z0-9_-]+|https?://t\.me/[a-zA-Z0-9_]+", backup_link, text, flags=re.IGNORECASE)
                 if text:
                     results.append(text)
                     if len(results) >= 30:
