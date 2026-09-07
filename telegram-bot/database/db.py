@@ -135,35 +135,50 @@ async def force_sub(bot, message):
         # so it's fetched lazily inside the except block below.
         member = await bot.get_chat_member(f_sub, message.from_user.id)
         if member.status == enums.ChatMemberStatus.BANNED:
-            await message.reply(
-                f"ꜱᴏʀʀʏ {message.from_user.mention}!\n"
-                " ʏᴏᴜ ᴀʀᴇ ʙᴀɴɴᴇᴅ ɪɴ ᴏᴜʀ ᴄʜᴀɴɴᴇʟ, "
-                "ʏᴏᴜ ᴡɪʟʟ ʙᴇ ʙᴀɴɴᴇᴅ ꜰʀᴏᴍ ʜᴇʀᴇ ᴡɪᴛʜɪɴ 10 ꜱᴇᴄᴏɴᴅꜱ"
-            )
+            try:
+                await message.reply(
+                    f"ꜱᴏʀʀʏ {message.from_user.mention}!\n"
+                    " ʏᴏᴜ ᴀʀᴇ ʙᴀɴɴᴇᴅ ɪɴ ᴏᴜʀ ᴄʜᴀɴɴᴇʟ, "
+                    "ʏᴏᴜ ᴡɪʟʟ ʙᴇ ʙᴀɴɴᴇᴅ ꜰʀᴏᴍ ʜᴇʀᴇ ᴡɪᴛʜɪɴ 10 ꜱᴇᴄᴏɴᴅꜱ"
+                )
+            except Exception:
+                pass
             await asyncio.sleep(10)
-            await bot.ban_chat_member(message.chat.id, message.from_user.id)
+            try:
+                await bot.ban_chat_member(message.chat.id, message.from_user.id)
+            except Exception:
+                pass
             return False
     except UserNotParticipant:
         try:
             f_link = (await bot.get_chat(f_sub)).invite_link or ""
         except Exception:
             f_link = ""
-        await bot.restrict_chat_member(
-            chat_id=message.chat.id,
-            user_id=message.from_user.id,
-            permissions=ChatPermissions(can_send_messages=False),
-        )
-        await message.reply(
-            f"<b>🚫 ʜɪ ᴅᴇᴀʀ {message.from_user.mention}!\n\n"
-            " ɪꜰ ʏᴏᴜ ᴡᴀɴᴛ ᴛᴏ ꜱᴇɴᴅ ᴍᴇꜱꜱᴀɢᴇ ɪɴ ᴛʜɪꜱ ɢʀᴏᴜᴘ.. "
-            "ᴛʜᴇɴ ꜰɪʀꜱᴛ ʏᴏᴜ ʜᴀᴠᴇ ᴛᴏ ᴊᴏɪɴ ᴏᴜʀ ᴄʜᴀɴɴᴇʟ ᴛᴏ ᴍᴇꜱꜱᴀɢᴇ ʜᴇʀᴇ 💯</b>",
-            reply_markup=InlineKeyboardMarkup([
-                [InlineKeyboardButton("✅ ᴊᴏɪɴ ᴄʜᴀɴɴᴇʟ ✅", url=f_link)],
-                [InlineKeyboardButton("🌀 ᴛʀʏ ᴀɢᴀɪɴ 🌀",
-                                      callback_data=f"checksub_{message.from_user.id}")],
-            ]),
-        )
-        await message.delete()
+        try:
+            await bot.restrict_chat_member(
+                chat_id=message.chat.id,
+                user_id=message.from_user.id,
+                permissions=ChatPermissions(can_send_messages=False),
+            )
+        except Exception:
+            pass
+        try:
+            await message.reply(
+                f"<b>🚫 ʜɪ ᴅᴇᴀʀ {message.from_user.mention}!\n\n"
+                " ɪꜰ ʏᴏᴜ ᴡᴀɴᴛ ᴛᴏ ꜱᴇɴᴅ ᴍᴇꜱꜱᴀɢᴇ ɪɴ ᴛʜɪꜱ ɢʀᴏᴜᴘ.. "
+                "ᴛʜᴇɴ ꜰɪʀꜱᴛ ʏᴏᴜ ʜᴀᴠᴇ ᴛᴏ ᴊᴏɪɴ ᴏᴜʀ ᴄʜᴀɴɴᴇʟ ᴛᴏ ᴍᴇꜱꜱᴀɢᴇ ʜᴇʀᴇ 💯</b>",
+                reply_markup=InlineKeyboardMarkup([
+                    [InlineKeyboardButton("✅ ᴊᴏɪɴ ᴄʜᴀɴɴᴇʟ ✅", url=f_link)],
+                    [InlineKeyboardButton("🌀 ᴛʀʏ ᴀɢᴀɪɴ 🌀",
+                                          callback_data=f"checksub_{message.from_user.id}")],
+                ]),
+            )
+        except Exception:
+            pass
+        try:
+            await message.delete()
+        except Exception:
+            pass
         return False
     except Exception as e:
         if admin:
