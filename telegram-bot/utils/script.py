@@ -3,8 +3,9 @@ class script:
 
 ✅ <b>CineRequestBot is alive and running!</b>
 
-🎬 Add me to your group and link your content channels.
-Members can then type any movie or series name — results are delivered privately via button.
+🎬 <b>How to Search:</b>
+• Send me any movie or series name directly here in private chat!
+• Or add me to your group to search together with friends.
 
 <b>Send /help for all commands</b>"""
 

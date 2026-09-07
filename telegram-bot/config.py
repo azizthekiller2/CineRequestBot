@@ -26,6 +26,8 @@ except ValueError:
     RESULTS_CHANNEL = _rc               # @username e.g. @MyResultsChannel
 
 SEARCH_REPLY_TTL = int(os.environ.get("SEARCH_REPLY_TTL", 600))  # 10 mins default
+PM_SEARCH_USER_TTL = int(os.environ.get("PM_SEARCH_USER_TTL", 300))  # 5 mins default
+PM_SEARCH_BOT_TTL  = int(os.environ.get("PM_SEARCH_BOT_TTL", 600))   # 10 mins default
 WELCOME_TTL      = 120
 HEALTH_PORT = int(os.environ.get("HEALTH_PORT", os.environ.get("PORT", 5000)))
 PORT        = HEALTH_PORT

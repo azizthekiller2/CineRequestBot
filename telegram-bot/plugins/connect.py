@@ -1,12 +1,12 @@
 import html
 import logging
-from pyrogram import Client, filters
+from pyrogram import Client, filters, enums
 from pyrogram.types import InlineKeyboardMarkup, InlineKeyboardButton
-from database.db import get_group, update_group
+from database.db import get_group, update_group, get_setting, set_setting
 from utils.helpers import get_chat_safe
+from config import OWNER_ID
 
 logger = logging.getLogger(__name__)
-
 
 # ── helpers ───────────────────────────────────────────────────────────────────
 
@@ -26,9 +26,7 @@ async def _owner_check(bot, message, group):
         return False
     return True
 
-
 def _get_user_client():
-    """Return user client if available, else None. Never raises."""
     try:
         from client import User
         if User is not None and User.is_connected:
@@ -37,9 +35,7 @@ def _get_user_client():
         pass
     return None
 
-
 async def _resolve_channel(bot, ch_id: int):
-    """Try to get channel title via bot first, then user session."""
     chat = await get_chat_safe(bot, ch_id)
     if chat:
         return getattr(chat, "title", str(ch_id))
@@ -53,26 +49,100 @@ async def _resolve_channel(bot, ch_id: int):
             pass
     return str(ch_id)
 
-
 # ── /addsource (unified command — add / remove / list) ────────────────────────
 
 _ADDSOURCE_HELP = (
     "📋 <b>Usage:</b>\n"
-    "<code>/addsource list</code> — show all source channels\n"
-    "<code>/addsource add -100xxxxxxxxxx</code> — connect a channel\n"
-    "<code>/addsource remove -100xxxxxxxxxx</code> — disconnect a channel"
+    "• <code>/addsource add -100xxxxxxxxxx</code> — connect a channel\n"
+    "• <code>/addsource remove -100xxxxxxxxxx</code> — disconnect a channel\n"
+    "• <code>/addsource list</code> — view all connected channels"
 )
 
-
-@Client.on_message(filters.group & filters.command("addsource"))
+@Client.on_message((filters.group | filters.private) & filters.command("addsource"))
 async def addsource_cmd(bot, message):
+    is_pm = (message.chat.type == enums.ChatType.PRIVATE)
+
+    # ── PM Handler: manages global source channels for PM search ───────────────
+    if is_pm:
+        if message.from_user.id != OWNER_ID:
+            return await message.reply("❌ Only the bot owner can manage global sources in PM.")
+
+        args = message.command[1:]
+        global_sources = list(await get_setting("global_sources", []))
+
+        # /addsource or /addsource list
+        if not args or args[0].lower() == "list":
+            if not global_sources:
+                return await message.reply(
+                    "📭 <b>No global source channels connected yet.</b>\n\n"
+                    "Use: <code>/addsource add -100xxxxxxxxxx</code>"
+                )
+            buttons = []
+            lines = ["<b>📡 Global Source Channels (PM Search):</b>\n"]
+            for i, ch_id in enumerate(global_sources, 1):
+                title = await _resolve_channel(bot, ch_id)
+                lines.append(f"{i}. <b>{html.escape(title)}</b> (<code>{ch_id}</code>)")
+                buttons.append([
+                    InlineKeyboardButton(
+                        f"❌ Remove: {title[:28]}",
+                        callback_data=f"gdiscon_{ch_id}",
+                    )
+                ])
+            return await message.reply(
+                "\n".join(lines),
+                reply_markup=InlineKeyboardMarkup(buttons),
+            )
+
+        sub = args[0].lower()
+        # /addsource add <id>
+        if sub == "add":
+            if len(args) < 2:
+                return await message.reply("Usage: <code>/addsource add -100xxxxxxxxxx</code>")
+            try:
+                ch_id = int(args[1])
+            except ValueError:
+                return await message.reply("❌ Invalid channel ID. Must be numeric (e.g. <code>-1001234567890</code>).")
+
+            if ch_id in global_sources:
+                return await message.reply("⚠️ That channel is already in global sources.")
+
+            title = await _resolve_channel(bot, ch_id)
+            global_sources.append(ch_id)
+            await set_setting("global_sources", global_sources)
+            return await message.reply(
+                f"✅ Global source added: <b>{html.escape(title)}</b> (<code>{ch_id}</code>)\n"
+                f"Total global sources: <b>{len(global_sources)}</b>"
+            )
+
+        # /addsource remove <id>
+        elif sub == "remove":
+            if len(args) < 2:
+                return await message.reply("Usage: <code>/addsource remove -100xxxxxxxxxx</code>")
+            try:
+                ch_id = int(args[1])
+            except ValueError:
+                return await message.reply("❌ Invalid channel ID.")
+
+            if ch_id not in global_sources:
+                return await message.reply("⚠️ That channel is not in global sources.")
+
+            global_sources.remove(ch_id)
+            await set_setting("global_sources", global_sources)
+            return await message.reply(
+                f"✅ Removed global source <code>{ch_id}</code>.\n"
+                f"Remaining: <b>{len(global_sources)}</b>"
+            )
+        else:
+            return await message.reply(_ADDSOURCE_HELP)
+
+    # ── Group Handler: manages group-specific source channels ─────────────────
     group = await get_group(message.chat.id)
     if not await _owner_check(bot, message, group):
         return
 
     args = message.command[1:]
 
-    # /addsource  OR  /addsource list
+    # /addsource or /addsource list
     if not args or args[0].lower() == "list":
         channels = group.get("channels", [])
         if not channels:
@@ -139,10 +209,47 @@ async def addsource_cmd(bot, message):
             f"✅ Removed source <code>{ch_id}</code>.\n"
             f"Remaining: <b>{len(channels)}</b>"
         )
-
     else:
         await message.reply(_ADDSOURCE_HELP)
 
+# ── Global Sources Callback ───────────────────────────────────────────────────
+
+@Client.on_callback_query(filters.regex(r"^gdiscon_"))
+async def global_disconnect_cb(bot, update):
+    if update.from_user.id != OWNER_ID:
+        return await update.answer("Only the bot owner can do this.", show_alert=True)
+    ch_id = int(update.data.replace("gdiscon_", ""))
+    sources = list(await get_setting("global_sources", []))
+    if ch_id in sources:
+        sources.remove(ch_id)
+        await set_setting("global_sources", sources)
+    await update.answer("✅ Removed from global sources!", show_alert=True)
+
+    if not sources:
+        try:
+            await update.message.edit("📭 No global source channels connected. Use <code>/addsource add</code>.")
+        except Exception:
+            pass
+        return
+
+    buttons = []
+    lines = ["<b>📡 Global Source Channels (PM Search):</b>\n"]
+    for i, cid in enumerate(sources, 1):
+        title = await _resolve_channel(bot, cid)
+        lines.append(f"{i}. <b>{html.escape(title)}</b> (<code>{cid}</code>)")
+        buttons.append([
+            InlineKeyboardButton(
+                f"❌ Remove: {title[:28]}",
+                callback_data=f"gdiscon_{cid}"
+            )
+        ])
+    try:
+        await update.message.edit(
+            "\n".join(lines),
+            reply_markup=InlineKeyboardMarkup(buttons)
+        )
+    except Exception:
+        pass
 
 # ── /connect ──────────────────────────────────────────────────────────────────
 
@@ -158,7 +265,6 @@ async def connect_cmd(bot, message):
             "Usage: <code>/connect -100xxxxxxxxxx</code>\n"
             "Tip: You can also use <code>/addsource add -100xxxxxxxxxx</code>"
         )
-
     try:
         ch_id = int(args[0])
     except ValueError:
@@ -178,7 +284,6 @@ async def connect_cmd(bot, message):
         f"Total connected: <b>{len(channels)}</b>"
     )
 
-
 # ── /disconnect ───────────────────────────────────────────────────────────────
 
 @Client.on_message(filters.group & filters.command("disconnect"))
@@ -193,7 +298,6 @@ async def disconnect_cmd(bot, message):
             "Usage: <code>/disconnect -100xxxxxxxxxx</code>\n"
             "Or use /connections to disconnect with buttons."
         )
-
     try:
         ch_id = int(args[0])
     except ValueError:
@@ -209,7 +313,6 @@ async def disconnect_cmd(bot, message):
         f"✅ Disconnected <code>{ch_id}</code>.\n"
         f"Remaining: <b>{len(channels)}</b>"
     )
-
 
 # ── /connections ──────────────────────────────────────────────────────────────
 
@@ -242,7 +345,6 @@ async def connections_cmd(bot, message):
         reply_markup=InlineKeyboardMarkup(buttons)
     )
 
-
 # ── disconnect callback ───────────────────────────────────────────────────────
 
 @Client.on_callback_query(filters.regex(r"^discon_"))
@@ -257,7 +359,6 @@ async def disconnect_cb(bot, update):
     group = await get_group(group_id)
     if not group:
         return await update.answer("Group not found.", show_alert=True)
-
     if update.from_user.id != group.get("user_id"):
         return await update.answer("Only the group owner can do this.", show_alert=True)
 
@@ -273,7 +374,6 @@ async def disconnect_cb(bot, update):
 
     channels.remove(ch_id)
     await update_group(group_id, {"channels": channels})
-
     if not channels:
         try:
             await update.message.edit("📭 No channels connected. Use /connect or /addsource add.")

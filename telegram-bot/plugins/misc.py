@@ -131,22 +131,3 @@ async def misc_cb(bot, update):
             ]])
         )
     await update.answer()
-
-
-@Client.on_message(filters.private & filters.text & filters.incoming)
-async def pm_text(bot, message):
-    content = message.text
-    if content.startswith("/") or content.startswith("#"):
-        raise ContinuePropagation
-    user    = message.from_user.first_name
-    user_id = message.from_user.id
-
-    await message.reply_text(text=script.PM_REPLY)
-    if LOG_CHANNEL:
-        try:
-            await bot.send_message(
-                chat_id=LOG_CHANNEL,
-                text=f"<b>#𝐌𝐒𝐆\n\nNᴀᴍᴇ : {user}\n\nID : {user_id}\n\nMᴇssᴀɢᴇ : {content}</b>"
-            )
-        except Exception:
-            pass
