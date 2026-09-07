@@ -165,6 +165,31 @@ telegram-bot/
 
 ---
 
+## 🛡️ Checkpoint & Single-Command Revert System
+
+Before applying any code modifications or bug fixes, create a checkpoint:
+
+```bash
+# Save a snapshot to .bak/
+./checkpoint.sh save "before_bug_fix"
+```
+
+If anything goes wrong or the bot begins crashing, instantly revert with a single command:
+
+```bash
+# Revert to latest snapshot (and auto-restarts systemd bot service)
+./restore.sh
+```
+
+### Other Helpful Commands:
+```bash
+./checkpoint.sh list          # View all saved checkpoints
+./checkpoint.sh diff          # View code changes since latest checkpoint
+./checkpoint.sh restore <id>  # Revert to a specific past checkpoint
+```
+
+---
+
 ## ⚙️ Tech Stack
 
 - **Python 3.11**

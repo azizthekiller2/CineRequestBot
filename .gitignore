@@ -13,3 +13,8 @@ venv/
 .DS_Store
 .vscode/
 .idea/
+
+# Checkpoint system backups
+.bak/
+*.bak/
+*.bak
