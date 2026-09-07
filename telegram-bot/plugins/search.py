@@ -183,6 +183,10 @@ def _page_keyboard(session_id: str, page: int, total_pages: int,
 async def _send_to_results_channel(bot, text: str):
     try:
         return await bot.send_message(chat_id=RESULTS_CHANNEL, text=text, disable_web_page_preview=True)
+    except FloodWait as e:
+        logger.warning("FloodWait of %ds when posting to RESULTS_CHANNEL", e.value)
+        await asyncio.sleep(e.value + 1)
+        return await bot.send_message(chat_id=RESULTS_CHANNEL, text=text, disable_web_page_preview=True)
     except (PeerIdInvalid, ValueError):
         logger.warning("Peer id invalid for RESULTS_CHANNEL -- re-resolving")
         try:
@@ -239,6 +243,13 @@ async def search_handler(bot, message):
             "<i>(User session not configured — set SESSION on Railway/Server)</i>"
         )
         await _schedule_delete(bot, m, 30)
+        return
+    if not getattr(User, "is_connected", False):
+        m = await message.reply(
+            "⚠️ <b>Search is temporarily reconnecting.</b>\n"
+            "<i>Please wait a few seconds and try again.</i>"
+        )
+        await _schedule_delete(bot, m, 15)
         return
 
     # 4. Permissions & Channels Resolution
@@ -339,7 +350,7 @@ async def search_handler(bot, message):
                     text=(
                         "#FailedSearch\n\n"
                         f"🔍 Query: <code>{html.escape(query)}</code>\n"
-                        f"👤 User: {user_info} (<code>{user.id if user else N/A}</code>)\n"
+                        f"👤 User: {user_info} (<code>{user.id if user else 'N/A'}</code>)\n"
                         f"💬 Chat: <b>{html.escape(chat_title)}</b> (<code>{message.chat.id}</code>)"
                     ),
                     disable_web_page_preview=True,

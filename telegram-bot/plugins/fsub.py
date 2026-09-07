@@ -12,6 +12,42 @@ logger = logging.getLogger(__name__)
 
 # ── PM Force-Subscribe Helpers ────────────────────────────────────────────────
 
+_pm_fsub_cache = {}  # ch_id -> {"title": str, "link": str, "ts": float}
+
+
+async def _get_channel_meta(bot, ch):
+    now = time()
+    cached = _pm_fsub_cache.get(ch)
+    if cached and (now - cached.get("ts", 0) < 600):
+        return cached["title"], cached["link"]
+
+    title = str(ch)
+    link = ""
+    try:
+        chat = await bot.get_chat(ch)
+        title = chat.title or str(ch)
+        link = chat.invite_link
+        if not link and chat.username:
+            link = f"https://t.me/{chat.username}"
+        if not link:
+            try:
+                link = await bot.export_chat_invite_link(ch)
+            except Exception:
+                cid_str = str(ch)
+                if cid_str.startswith("-100"):
+                    cid_str = cid_str[4:]
+                link = f"https://t.me/c/{cid_str}"
+    except Exception as e:
+        logger.warning("Could not fetch invite link for fsub channel %s: %s", ch, e)
+        cid_str = str(ch)
+        if cid_str.startswith("-100"):
+            cid_str = cid_str[4:]
+        link = f"https://t.me/c/{cid_str}"
+
+    _pm_fsub_cache[ch] = {"title": title, "link": link, "ts": now}
+    return title, link
+
+
 async def get_pm_fsub_channels() -> list:
     channels = await get_setting("pm_fsub_channels", None)
     if channels is not None:
@@ -23,6 +59,7 @@ async def get_pm_fsub_channels() -> list:
         except ValueError:
             fallback.append(CHANNEL)
     return fallback
+
 
 async def check_pm_fsub(bot, user_id: int):
     channels = await get_pm_fsub_channels()
@@ -36,22 +73,11 @@ async def check_pm_fsub(bot, user_id: int):
             if member.status in (enums.ChatMemberStatus.BANNED, enums.ChatMemberStatus.RESTRICTED):
                 return False, [], True
         except UserNotParticipant:
-            try:
-                chat = await bot.get_chat(ch)
-                title = chat.title or str(ch)
-                link = chat.invite_link
-                if not link and chat.username:
-                    link = f"https://t.me/{chat.username}"
-                if not link:
-                    try:
-                        link = await bot.export_chat_invite_link(ch)
-                    except Exception:
-                        link = f"https://t.me/c/{str(ch).lstrip('-100')}"
-            except Exception as e:
-                logger.warning("Could not fetch invite link for fsub channel %s: %s", ch, e)
-                title = str(ch)
-                link = f"https://t.me/c/{str(ch).lstrip('-100')}"
+            title, link = await _get_channel_meta(bot, ch)
             unjoined.append({"id": ch, "title": title, "link": link})
+        except FloodWait as e:
+            logger.warning("FloodWait checking member %s: sleeping %ds", ch, e.value)
+            await asyncio.sleep(e.value + 1)
         except Exception as e:
             logger.warning("Error checking chat member %s for user %s: %s", ch, user_id, e)
 
@@ -152,6 +178,7 @@ async def pm_fsub_admin_cmd(bot, message):
             return await message.reply("⚠️ That channel is already in PM Force-Subscribe list.")
         channels.append(ch_id)
         await set_setting("pm_fsub_channels", channels)
+        _pm_fsub_cache.clear()
         return await message.reply(
             f"✅ Added PM Force-Subscribe channel: <b>{html.escape(title)}</b> (<code>{ch_id}</code>)\n"
             f"Total channels: <b>{len(channels)}</b>"
@@ -170,6 +197,7 @@ async def pm_fsub_admin_cmd(bot, message):
             return await message.reply("⚠️ Channel not found in PM Force-Subscribe list.")
         channels.remove(target)
         await set_setting("pm_fsub_channels", channels)
+        _pm_fsub_cache.clear()
         return await message.reply(
             f"✅ Removed channel <code>{target}</code> from PM Force-Subscribe.\n"
             f"Remaining: <b>{len(channels)}</b>"
@@ -177,6 +205,7 @@ async def pm_fsub_admin_cmd(bot, message):
 
     elif sub == "clear":
         await set_setting("pm_fsub_channels", [])
+        _pm_fsub_cache.clear()
         return await message.reply("✅ Cleared all PM Force-Subscribe channels.")
 
     else:
@@ -202,6 +231,7 @@ async def pm_fsub_remove_cb(bot, update):
     if target in channels:
         channels.remove(target)
         await set_setting("pm_fsub_channels", channels)
+        _pm_fsub_cache.clear()
     await update.answer("✅ Removed!", show_alert=True)
 
     if not channels:
